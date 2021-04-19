@@ -1,56 +1,52 @@
 library(rvest)
 library(RCurl)
 library(DT)
+library(reactable)
 library(shiny)
+library(shinyWidgets)
 library(shinydashboard)
-library(mapview)
+library(XML)
 library(leaflet)
 library(ggplot2)
-
-products <- c("TU : Temperatur und rel. Feuchte (stündl.)",
-              "RR : Niederschlagsdaten (tägl.)",
-              "FF : Winddaten (stündl.)",
-              "SO : Sonnenscheindauer (stündl.)",
-              "EB : Erdbodentemperatur (tägl.)",
-              "KL : Klimadaten",
-              "AE : aerologische Beobachtungen",
-              "PE/PS : phänologischen Beobachtungen",
-              "SY : autom. Messungen (stündl.)",
-              "MI/MN : autom. Messungen (10 min.)")
+library(tidyr)
+library(dplyr)
+library(foreach)
+library(parallel)
+library(doParallel)
 
 
-header <- dashboardHeader(title = "Stationslexikon",
-                          dropdownMenu(type = "messages",
-                                       messageItem(
-                                         from = "Allergieinfo",
-                                         message = "Keine erhöhte Pollenkonz."
-                                       ),
-                                       messageItem(
-                                         from = "New User",
-                                         message = "How do I register?",
-                                         icon = icon("question"),
-                                         time = strftime(Sys.time(),"%H:%M:%S", tz = "UTC")
-                                       ),
-                                       messageItem(
-                                         from = "Support",
-                                         message = "The new server is ready.",
-                                         icon = icon("life-ring"),
-                                         time = strftime(Sys.Date(), "%d.%m.%Y", tz = "UTC")
-                                       )
-                          )
+header <- dashboardHeader(title = "DWData", titleWidth = 300
+                          # dropdownMenu(type = "messages",
+                          #              messageItem(
+                          #                from = "Allergieinfo",
+                          #                message = "Keine erhöhte Pollenkonz."
+                          #              ),
+                          #              messageItem(
+                          #                from = "New User",
+                          #                message = "How do I register?",
+                          #                icon = icon("question"),
+                          #                time = strftime(Sys.time(),"%H:%M:%S", tz = "UTC")
+                          #              ),
+                          #              messageItem(
+                          #                from = "Support",
+                          #                message = "The new server is ready.",
+                          #                icon = icon("life-ring"),
+                          #                time = strftime(Sys.Date(), "%d.%m.%Y", tz = "UTC")
+                          #              )
+                          # )
 )
 sidebar <- dashboardSidebar(width = 300, # tags$style(HTML(".main-sidebar{width: 300px;}"))
-                            menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
+                            # menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
                             # menuItem("Widgets", tabName = "widgets", icon = icon("th")),
                             # menuItem("Stationsauswahl", tabName = "stationen", icon = icon("th"),
-                            sidebarMenuOutput("menu"),
-                            checkboxGroupInput("checkboxes", 
-                                               label = "Stationsprodukte", 
-                                               choiceValues = c("TU","RR","FF","SO","EB","KL","AE","PE/PS","SY","MI/MN"),
-                                               c("a", "b",  "c", "d", "e", "f", "f", "g", "h", "i", "j", "k", "l"),
+                            
+                            checkboxGroupInput("prod", 
+                                               label = "Messprodukte", 
+                                               choiceValues = c("KL","RR","PE|PS","EB","FF","MI|MN","SO","SY","TU","AE"),
+                                               # c("a", "b",  "c", "d", "e", "f", "f", "g", "h", "i", "j", "k", "l"),
                                                # "KL" "RR" "PE" "EB" "FF" "MI" "MN" "SO" "SY" "TU" "AE" "EF" "SF"
                                                inline = FALSE,
-                                               selected = 10,
+                                               selected = c("KL"), # ,"RR","PE|PS","EB","FF","MI|MN","SO","SY","TU","AE"
                                                choiceNames = c("KL : Klimadaten",
                                                                "RR : Niederschlagsdaten (tägl.)",
                                                                "PE/PS : phänologischen Beobachtungen",
@@ -62,30 +58,37 @@ sidebar <- dashboardSidebar(width = 300, # tags$style(HTML(".main-sidebar{width:
                                                                "TU : Temperatur und rel. Feuchte (stündl.)",
                                                                "AE : aerologische Beobachtungen")
                                                ),
-                            actionLink("selectall", "Alle auswählen"),
-                            dateRangeInput('dateRange2',
-                                           label = "Zeitraum von - bis",
-                                           start = as.Date("1781-01-01"), end = Sys.Date() - 1,
+                            menuItemOutput("altitude"),
+                            dateRangeInput("daterange",
+                                           label = "gemessen im Zeitraum",
+                                           start = Sys.Date()-365, end = Sys.Date()-7, # as.Date("1781-01-01")
                                            min = as.Date("1781-01-01"), max = Sys.Date(),
-                                           separator = " - ", format = "dd.mm.yyyy")
-)
+                                           startview = "year",
+                                           separator = "bis", format = "dd.mm.yyyy", language = "de")
+                            # actionLink("selectall", "Alle auswählen")
+
+                            )
 body <- dashboardBody(
   fluidPage(
     fluidRow(
-      box(DT::dataTableOutput("DTtable"), width = 8),
-      box(leaflet::leafletOutput("mapplot"), width = 4)
-    ),
-    fluidRow(
-      box(verbatimTextOutput('rownr'), width = 8),
-    ),
+      column(width = 6,
+      box(reactable::reactableOutput("table"), title = "Zur Auswahl verfügbare Stationen", width = 12),
+      box(verbatimTextOutput('rownr'), width = 12),
+      box(actionButton("button","Download Auswahl"), width = 12)
+      ),
+      column(width = 6,
+      box(leaflet::leafletOutput("mapplot"), title = "Karte", width = 12), # background = "blue"
+      box(reactable::reactableOutput("table2"), title = "Messprodukt Informationen zu ausgewählten Stationen", width = 12)
+      )
+    )
       # 
       # # box(title = "Stationshöhe Histogramm",width = 4,
       # #     plotOutput("hist"))
-    fluidRow(
-      box(actionButton("button","Download Auswahl"))
+
     )
-))
+)
 
 ui <- shinyUI(dashboardPage(skin = "blue", header, sidebar, body))
 
+shinyApp(ui, server)
 

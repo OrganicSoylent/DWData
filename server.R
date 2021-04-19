@@ -1,150 +1,221 @@
 library(rvest)
 library(RCurl)
 library(DT)
+library(reactable)
 library(shiny)
+library(shinyWidgets)
 library(shinydashboard)
-library(mapview)
+library(XML)
 library(leaflet)
 library(ggplot2)
 library(tidyr)
 library(dplyr)
-
-# shinyApp(ui, server)
-
-tab <- read.table("C:/Users/gabba/Desktop/Dasboard/statlist.csv", header = T, sep = ",")
-# tab <- tab[,c(3,4,2,1,5:11)]
-load("C:/Users/gabba/Desktop/Dasboard/statlex.RData")
-
-# tab2 <- tab[-which(tab$Beginn == ""),c(1,2,5,6,7,9,10,11)]
-# tab2 <- tab2[grep(FALSE,duplicated(tab2$Stations_ID)),]
-
-cd <- data.frame(dwd = unique(tab$Kennung), code = c("a","b","c","d","e","f","f","g","h","i","j","k","l"))
-tab$code <- NA
-for(i in 1:length(unique(tab$Kennung))){
-  tab$code[which(tab$Kennung == unique(tab$Kennung)[i])] <- cd[i,2]
-}
-
-
-{
-id <- c()
-kenn <- c()
-alt <- c()
-bund <- c()
-lon <- c()
-lat <- c()
-for(i in 1:length(new.db)){
-  id[i] <- new.db[[i]]$Stations_ID[1]
-  kenn[i] <- paste(new.db[[i]]$Kennung[1:length(new.db[[i]]$Kennung)], collapse = ", ")
-  alt[i] <- new.db[[i]]$`Stations-höhe`[1]
-  bund[i] <- new.db[[i]]$Bundesland[1]
-  lon[i] <- new.db[[i]]$Länge[1]
-  lat[i] <- new.db[[i]]$Breite[1]
-}
-}
-
-length(unique(tab$Kennung))
-
-tab2 <- data.frame("Station" = names(new.db), 
-                   "ID" = as.numeric(id), 
-                   "Produkte" = kenn,
-                   "m.ü.NN" = as.numeric(alt),
-                   "Latitude" = as.numeric(lat),
-                   "Longitude" = as.numeric(lon), 
-                   "Bundesland" = bund)
-
-pt <- tab2
-sp::coordinates(pt) <- ~Longitude+Latitude
-sp::proj4string(pt) <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-
-tab2$Station[rowSums(sapply(tab2, '%in%', "KL")) > 0]
-
-grep("KL",tab2$Produkte)
-
-tab$Stationsname[which(tab$Kennung %in% "KL")]
-
-which(tab2$ID %in% unique(tab$Stations_ID[which(tab$Kennung %in% substr(products,1,2)[1:3])]) )
-
-
+library(foreach)
+library(parallel)
+library(doParallel)
 
 
 #### Server ####
-server <- function(input, output, session) {
-  output$menu <- renderMenu(
-    sliderInput("range", "Stationshöhe [m. ü. NN]",
-                min = min(tab2$m.ü.NN), max = max(tab2$m.ü.NN),
-                value = c(min(tab2$m.ü.NN),max(tab2$m.ü.NN)), sep = NA)
-  )
+server <- function(input, output) { # , session
+  #### data section ####
+  withProgress(message = 'verarbeite Stationslexikon', value = 0, {
+  ## "https://www.dwd.de/DE/leistungen/klimadatendeutschland/statliste/statlex_html.html?view=nasPublication&nn=16102"
   
-  # t1 <- as.Date(tab2$Beginn,"%d.%m.%Y")
-  # t2 <- as.Date(tab2$Ende,"%d.%m.%Y")
+  url <- "https://www.dwd.de/DE/leistungen/klimadatendeutschland/statliste/statlex_html.html?view=nasPublication&nn=16102"
+  # url <- "https://www.dwd.de/DE/leistungen/klimadatendeutschland/statliste/statlex_html.html;jsessionid=D70931FBB12457D14A53133624C40537.live11054?view=nasPublication&nn=16102"
+  webpage <- read_html(url)
   
-  # output$menu2 <- renderMenu(
-  #   sliderInput("range2", "Zeitraum",
-  #               min = min(as.numeric(strftime(t1,"%Y"))), max = max(as.numeric(strftime(t2,"%Y"))),
-  #               value = c(min(as.numeric(strftime(t1,"%Y"))),max(as.numeric(strftime(t2,"%Y")))), sep = "")
-  # )
+  tabhead <- html_text(html_nodes(webpage,"th"))
+  tabhead <- tabhead[2:12]
+  nrows <- length(html_nodes(webpage,"tr"))
+  nodes <- html_nodes(webpage, "tr")
+  
+  incProgress(1/4)
+  ## multithreaded creation of station-list dataframe
+  cluster = makeCluster(detectCores(), type = "SOCK")
+  registerDoParallel(cluster)
+  
+  tab <- c()
+  row <- strsplit(as.character(nodes[3:nrows]),"\n")
+
+  tab <- foreach(i = 1:length(row), .combine = 'rbind') %do% {
+      rbind(tab,gsub(c(">|<"),"", regmatches(row[[i]],regexpr(">.*.<",row[[i]])) ) )
+    }
+  stopCluster(cluster)
+  
+  tab <- as.data.frame(tab)
+  colnames(tab)  <- c("Station","ID","Messprodukte","stat-kennung",
+                      "Breite","Länge","Höhe","Flussgebiet","Bundesland","Beginn","Ende")
+  # tab <- tab[,c(-4,-8)]
+  tab$ID <- as.numeric(tab$ID)
+  tab$Breite <- as.numeric(tab$Breite)
+  tab$Länge <- as.numeric(tab$Länge)
+  tab$Höhe <- as.numeric(tab$Höhe)
+  tab$Beginn <- as.Date(tab$Beginn, "%d.%m.%Y")
+  tab$Ende <- as.Date(tab$Ende, "%d.%m.%Y")
+  
+  tab2 <- suppressMessages(tab[, c(-4,-8)] %>%
+    group_by(Station) %>%
+    summarise(
+      "Station" = unique(Station), 
+      "ID" = unique(ID),
+      "Messprodukte" = unique(paste(Messprodukte, collapse = ", ")), 
+      "Breite" = unique(Breite),
+      "Länge" = unique(Länge), 
+      "Höhe" = unique(Höhe), 
+      "Bundesland" = unique(Bundesland)) %>%
+    as.data.frame())
+  
+  ## creating SpatialPointsDataframe for map (not necessary)
+  # pt <- tab2
+  # sp::coordinates(pt) <- ~Länge+Breite
+  # sp::proj4string(pt) <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+  
+  incProgress(2/4)
+  
+  
+  ## altitude and time range sidebar menu
+  output$altitude <- renderMenu({sliderInput("altitude", "Stationshöhe",
+              min = min(tab$Höhe), max = max(tab$Höhe),
+              value = c(min(tab$Höhe),max(tab$Höhe)), sep = NA)
+  })
+  
+  output$daterange <- renderMenu({
+  })
+  
   
 
-  pt2 <- eventReactive(c(input$range,input$range2), 
-                       pt[which(pt$m.ü.NN >= input$range[1] & 
-                                  pt$m.ü.NN <= input$range[2]), ]) # & 
-                                  # as.numeric(strftime(as.Date(pt$Beginn,"%d.%m.%Y"),"%Y")) >= input$range2[1]  &
-                                  # as.numeric(strftime(as.Date(pt$Beginn,"%d.%m.%Y"),"%Y")) <= input$range2[2]), ])
+  #### Input Filters for table ####
+  ## output is a function that creates a dataframe -> tb()[ , ]
+  tb <- eventReactive(c(input$prod, input$altitude, input$daterange), {
+    ## selection for product
+    suppressMessages(inner_join(tab2[grep(paste(input$prod,collapse="|"), tab2$Messprodukte), ], ## 'paste(input$prod,collapse="|")' delivers regex compatible vector c("PE|RR|...")
+    ## selection for altitude
+               tab2[which(tab2$Höhe >= input$altitude[1] & 
+                               tab2$Höhe <= input$altitude[2]), ]) %>%
+      ## selection for time range
+      inner_join(tab2[tab2$ID %in% unique(tab$ID[which(tab$Beginn <= input$daterange[1] &
+                                                            tab$Ende >= input$daterange[2])]), ]) %>%
+      as.data.frame()) # reactable can't work with dplyr/pandas type tables - needs dataframe
+  })
+
   
+  ### in table selected rows
+  selected <- reactive(getReactableState("table", "selected"))
+  
+  pt <- eventReactive(selected(), {
+    tab2[which(!is.na(match(tab2$ID, tb()[selected(),"ID"]))), ]
+    })
+  
+
+  #### map ####
   output$mapplot <- renderLeaflet({
-    leaflet() %>% 
+    leaflet() %>%
+      setView(8.7862, 50.0899, zoom = 5) %>%
       addProviderTiles("OpenTopoMap",providers$Stamen.TonerLite,
                        options = providerTileOptions(noWrap = TRUE)) %>%
-      addCircleMarkers(data = pt2(), radius = 1.3, fillOpacity = 1, label = pt2()$Station,
-                       popup = paste(sep = "<br/>",
-                                     paste0("<b>",pt2()$Station,"</b>"),
-                                     paste("ID:",pt2()$ID),
-                                     paste("Höhe:",pt2()$m.ü.NN,"m"),
-                                     paste("Land:",pt2()$Bundesland),
-                                     pt2()$Produkte),
-                                     # paste("Beginn:",pt2()$Beginn),
-                                     # paste("Ende:",pt2()$Ende)), 
-                       popupOptions = list(closeButton = FALSE))
+      addLegend(position = "bottomright", colors = c("blue","red"), 
+                labels = c("Stationen mit ausgewählten Produkt(en)",
+                           "Ausgewählte Stationen"))
   })
-  # output$mapplot <- mapview::renderMapview(mapview(pt,
-  #           legend = F, map.types = c("OpenStreetMap","OpenTopoMap"),
-  #           layer.name = "aktive DWD Stationen",
-  #           label = pt$Stationsname, lwd = 1, cex = 3)
-  #   )
-  tb <- eventReactive(c(input$range,input$range2), 
-                      tab2[which(tab2$m.ü.NN >= input$range[1]  &
-                                   tab2$m.ü.NN <= input$range[2]), ]) # &
-                                   # as.numeric(strftime(as.Date(tab2$Beginn,"%d.%m.%Y"),"%Y")) >= input$range2[1]  &
-                                   # as.numeric(strftime(as.Date(tab2$Beginn,"%d.%m.%Y"),"%Y")) <= input$range2[2]), ])
-  # observe(
-    output$DTtable <- DT::renderDataTable(
-      datatable(tb(),
-                escape = 0,
-                rownames = F, 
-                extensions = "Buttons",
-                colnames = c("Station","Stations-ID","Messprodukt","Höhe [m ü. NN]","Breite (lat)","Länge (lon)","Bundesland"),
-                selection = list(mode = "multiple", target = "row"),
-                options = list(pageLength = 15, dom = "lfrtBip",
-                               buttons = list("copy","csv"),
-                               language = 
-                                 list(search = "Suche:",
-                                      sLengthMenu = "Zeige _MENU_ Ergebnisse pro Seite",
-                                      sZeroRecords = "Nichts gefunden",
-                                      sInfo = "Zeige _START_ bis _END_ aus _TOTAL_ Einträgen",
-                                      sInfoEmpty = "Zeige 0 bis 0 von 0 Einträgen",
-                                      sInfoFiltered = "(aus _MAX_ gefiltert)",
-                                      sProcessing = "Bearbeite...",
-                                      oPaginate = list(sPrevious = "Vorherige",
-                                                       sNext = "Nächste",
-                                                       sLast = "Letzte",
-                                                       sFirst = "Erste")))
-                ) )
-  # )
+  observe({
+      leafletProxy("mapplot") %>%
+      clearMarkers() %>% # clears markers of previous selection on input update
+      
+      addCircleMarkers(data = tb(), lat = ~Breite, lng = ~Länge, 
+                       color = "blue", radius = 1, opacity = .75, # fillOpacity = .33,
+                       label = paste0("",tb()$Station),
+                       popup = paste(sep = "<br/>",
+                                     paste0("<b>",tb()$Station,"</b>"),
+                                     paste("ID:",tb()$ID),
+                                     paste("Höhe:",tb()$Höhe,"m"),
+                                     paste("Messpr.:",tb()$Messprodukte)),
+                       # paste("Land:",pt2()$Bundesland)),
+                       popupOptions = list(closeButton = FALSE)) %>%
+      
+      addCircleMarkers(data = pt(), lat = ~Breite, lng = ~Länge,
+                       color = "red", radius = 4, opacity = .75, # fillOpacity = .33
+                       label = ~Station,
+                       popup = paste(sep = "<br/>",
+                                     paste0("<b>",pt()$Station,"</b>"),
+                                     paste("ID:",pt()$ID),
+                                     paste("Höhe:",pt()$Höhe,"m"),
+                                     paste("Messpr.:",pt()$Messprodukte)),
+                       # paste("Land:",pt2()$Bundesland)),
+                       popupOptions = list(closeButton = FALSE))
+    
+  })
+
+
+  incProgress(3/4)
+
+  #### interactive table ####
+  output$table <- reactable::renderReactable({
+    reactable(tb()[,c(1,2,3,6,7)], 
+              filterable = TRUE, searchable = TRUE, selection = "multiple", onClick = "select", 
+                          striped = TRUE, highlight = TRUE, bordered = TRUE, outlined = TRUE,
+              defaultPageSize = 10, showPageSizeOptions = TRUE,  pageSizeOptions = c(10, 25, 50, 100),
+              # theme = reactableTheme(color = "white", backgroundColor = bgcol, borderColor = "#808080", stripedColor = strpcol),
+              columns = list(
+                ID = colDef(align = "left"),
+                Höhe = colDef(name = "Höhe [m ü. NN]", align = "center"),
+                Messprodukte = colDef(name = "verf. Messprodukte")
+                # Breite = colDef(name = "Breite (lat)", filterable = FALSE, align = "right"),
+                # Länge = colDef(name = "Länge (lon)", filterable = FALSE, align = "left")
+                            ),
+              language = reactableLang(
+                              searchPlaceholder = "Suche...",
+                              noData = "Keine Einträge gefunden",
+                              pageInfo = "{rowStart} bis {rowEnd} von {rows} Einträgen",
+                              pagePrevious = "\u276e",
+                              pageNext = "\u276f",
+                              pageSizeOptions = "Zeige {rows}",
+                              pagePreviousLabel = "Vorherige Seite",
+                              pageNextLabel = "Nächste Seite",
+                              deselectRowLabel = "Auswahl aufheben"
+                            )
+    )
+  }) # rendertable
+  
+  output$table2 <- reactable::renderReactable({
+    reactable(tab[tab$ID %in% tb()[selected(),"ID"], c("Station","Messprodukte","Beginn","Ende")],
+              groupBy = c("Station"),
+              striped = TRUE, highlight = TRUE, outlined = TRUE, filterable = TRUE,
+              # theme = reactableTheme(color = "white", backgroundColor = bgcol, stripedColor = strpcol),
+              columns = list(Beginn = colDef(filterable = F), Ende = colDef(filterable = F)),
+              language = reactableLang(
+                searchPlaceholder = "Suche...",
+                noData = "Keine Einträge gefunden",
+                pageInfo = "{rowStart} bis {rowEnd} von {rows} Einträgen",
+                pagePrevious = "\u276e",
+                pageNext = "\u276f",
+                pageSizeOptions = "Zeige {rows}",
+                pagePreviousLabel = "Vorherige Seite",
+                pageNextLabel = "Nächste Seite",
+                deselectRowLabel = "Auswahl aufheben"
+              )
+    )
+  }) # rendertable2
+  
+  incProgress(4/4)
+  #### Testboxes for selected stations ####
+  # output$rownr <- renderText({
+  #   paste("Anzahl ausgewählter Stationen:", length(tb()[selected(),"ID"]) )
+  # })
+  
+
+  output$rownr <- renderText({
+    paste("Stationen ausgewählt:",length(selected()) )
+  })
+  # output$rownr <- renderText({
+  #   length(tb()[,1])
+  #   })
   
     # output$rownr <-  renderText(paste("Stationen ausgewählt:",
     #                                   length(tb()[input$DTtable_rows_selected, "ID"])) )
-    output$rownr <- renderText(substr(input$checkboxes,1,2))
+    # output$rownr <- renderText(substr(input$checkboxes,1,2))
 
+    #### Function to read and store selected DWD data ####
     readDWD <- function(stat_id, resol, prod, time){
       baseURL <- "ftp://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/"
       lookURL_h <- paste0(baseURL,resol,"/",prod,"/","historical","/")
@@ -206,10 +277,8 @@ server <- function(input, output, session) {
     }
     
     observeEvent(input$button, {
-      output$id <- readDWD(stat_id = tb()[input$DTtable_rows_selected, "Stations_ID"], resol = "daily", prod = "kl")
+      output$id <- readDWD(stat_id = tb()[selected(),"ID"], resol = "daily", prod = "kl")
       })
-    
-    
     
     # kl <- readDWD(stat_id = output$rownr, resol = "daily", prod = "kl")
   
@@ -218,8 +287,15 @@ server <- function(input, output, session) {
   #     hist(tab2[,"Stations.höhe"], breaks = 100, ylab = "Anzahl", xlab = "[m ü. NN]", main = NA)
   #   )
   # )
+   
+    
+  }) # Progressbar
 }
 
 
 shinyApp(ui, server)
+
+
+
+
 
