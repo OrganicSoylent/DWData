@@ -19,7 +19,7 @@ header <- dashboardHeader(title = "DWData", titleWidth = 300
                           # dropdownMenu(type = "messages",
                           #              messageItem(
                           #                from = "Allergieinfo",
-                          #                message = "Keine erhöhte Pollenkonz."
+                          #                message = "Keine erh?hte Pollenkonz."
                           #              ),
                           #              messageItem(
                           #                from = "New User",
@@ -48,14 +48,14 @@ sidebar <- dashboardSidebar(width = 300, # tags$style(HTML(".main-sidebar{width:
                                                inline = FALSE,
                                                selected = c("KL"), # ,"RR","PE|PS","EB","FF","MI|MN","SO","SY","TU","AE"
                                                choiceNames = c("KL : Klimadaten",
-                                                               "RR : Niederschlagsdaten (tägl.)",
-                                                               "PE/PS : phänologischen Beobachtungen",
-                                                               "EB : Erdbodentemperatur (tägl.)",
-                                                               "FF : Winddaten (stündl.)",
+                                                               "RR : Niederschlagsdaten (tÃ¤gl.)",
+                                                               "PE/PS : phÃ¤nologischen Beobachtungen",
+                                                               "EB : Erdbodentemperatur (tÃ¤gl.)",
+                                                               "FF : Winddaten (stÃ¼ndl.)",
                                                                "MI/MN : autom. Messungen (10 min.)",
-                                                               "SO : Sonnenscheindauer (stündl.)",
-                                                               "SY : autom. Messungen (stündl.)",
-                                                               "TU : Temperatur und rel. Feuchte (stündl.)",
+                                                               "SO : Sonnenscheindauer (stÃ¼ndl.)",
+                                                               "SY : autom. Messungen (stÃ¼ndl.)",
+                                                               "TU : Temperatur und rel. Feuchte (stÃ¼ndl.)",
                                                                "AE : aerologische Beobachtungen")
                                                ),
                             menuItemOutput("altitude"),
@@ -65,24 +65,24 @@ sidebar <- dashboardSidebar(width = 300, # tags$style(HTML(".main-sidebar{width:
                                            min = as.Date("1781-01-01"), max = Sys.Date(),
                                            startview = "year",
                                            separator = "bis", format = "dd.mm.yyyy", language = "de")
-                            # actionLink("selectall", "Alle auswählen")
+                            # actionLink("selectall", "Alle ausw?hlen")
 
                             )
 body <- dashboardBody(
   fluidPage(
     fluidRow(
       column(width = 6,
-      box(reactable::reactableOutput("table"), title = "Zur Auswahl verfügbare Stationen", width = 12),
+      box(reactable::reactableOutput("table"), title = "Zur Auswahl verfÃ¼gbare Stationen", width = 12),
       box(verbatimTextOutput('rownr'), width = 12),
       box(actionButton("button","Download Auswahl"), width = 12)
       ),
       column(width = 6,
       box(leaflet::leafletOutput("mapplot"), title = "Karte", width = 12), # background = "blue"
-      box(reactable::reactableOutput("table2"), title = "Messprodukt Informationen zu ausgewählten Stationen", width = 12)
+      box(reactable::reactableOutput("table2"), title = "Messprodukt Informationen zu ausgewÃ¤hlten Stationen", width = 12)
       )
     )
       # 
-      # # box(title = "Stationshöhe Histogramm",width = 4,
+      # # box(title = "Stationsh?he Histogramm",width = 4,
       # #     plotOutput("hist"))
 
     )

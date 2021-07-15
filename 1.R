@@ -1,3 +1,19 @@
+library(rvest)
+library(RCurl)
+library(DT)
+library(reactable)
+library(shiny)
+library(shinyWidgets)
+library(shinydashboard)
+library(XML)
+library(leaflet)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(foreach)
+library(parallel)
+library(doParallel)
+
 url <- "https://www.dwd.de/DE/leistungen/klimadatendeutschland/statliste/statlex_html.html?view=nasPublication&nn=16102"
 # url <- "https://www.dwd.de/DE/leistungen/klimadatendeutschland/statliste/statlex_html.html;jsessionid=D70931FBB12457D14A53133624C40537.live11054?view=nasPublication&nn=16102"
 webpage <- read_html(url)
@@ -22,12 +38,12 @@ stopCluster(cluster)
 
 tab <- as.data.frame(tab)
 colnames(tab)  <- c("Station","ID","Messprodukte","stat-kennung",
-                    "Breite","Länge","Höhe","Flussgebiet","Bundesland","Beginn","Ende")
+                    "Breite","LÃ¤nge","HÃ¶he","Flussgebiet","Bundesland","Beginn","Ende")
 # tab <- tab[,c(-4,-8)]
 tab$ID <- as.numeric(tab$ID)
 tab$Breite <- as.numeric(tab$Breite)
-tab$Länge <- as.numeric(tab$Länge)
-tab$Höhe <- as.numeric(tab$Höhe)
+tab$LÃ¤nge <- as.numeric(tab$LÃ¤nge)
+tab$HÃ¶he <- as.numeric(tab$HÃ¶he)
 tab$Beginn <- as.Date(tab$Beginn, "%d.%m.%Y")
 tab$Ende <- as.Date(tab$Ende, "%d.%m.%Y")
 
@@ -38,8 +54,8 @@ tab2 <- tab[, c(-4,-8)] %>%
     "ID" = unique(ID),
     "Messprodukte" = unique(paste(Messprodukte, collapse = ", ")), 
     "Breite" = unique(Breite),
-    "Länge" = unique(Länge), 
-    "Höhe" = unique(Höhe), 
+    "LÃ¤nge" = unique(LÃ¤nge), 
+    "HÃ¶he" = unique(HÃ¶he), 
     "Bundesland" = unique(Bundesland)) %>%
   as.data.frame()
 
@@ -47,6 +63,39 @@ tab2 <- tab[, c(-4,-8)] %>%
 # tab3 <- tab[,c(1,2,3,10,11)] %>%
 #   group_by(ID) %>%
 #   nest(infos = c(Messprodukte,Beginn,Ende)) %>% as.data.frame()
+
+
+leaflet() %>%
+  setView(8.7862, 50.0899, zoom = 5) %>%
+  addProviderTiles("OpenTopoMap",providers$Stamen.TonerLite,
+                   options = providerTileOptions(noWrap = TRUE)) %>%
+  addLegend(position = "bottomright", colors = c("blue","red"), 
+            labels = c("Stationen mit ausgewÃ¤hlten Produkt(en)",
+                       "AusgewÃ¤hlte Stationen")) %>%
+  
+  addCircleMarkers(data = tab2, lat = tab2$Breite[1:100], lng = tab2$LÃ¤nge[1:100],
+                   color = "blue", radius = 1, opacity = .75, # fillOpacity = .33,
+                   label = paste0("",tab2$Station),
+                   popup = paste(sep = "<br/>",
+                                 paste0("<b>",tab2$Station,"</b>"),
+                                 paste("ID:",tab2$ID),
+                                 paste("HÃ¶he:",tab2$HÃ¶he,"m"),
+                                 paste("Messpr.:",tab2$Messprodukte)),
+                   # paste("Land:",pt2()$Bundesland)),
+                   popupOptions = list(closeButton = FALSE)) %>%
+  
+  # addCircleMarkers(lat = tab2$Breite[1:50], lng = tab2$LÃ¤nge[1:50],
+  #                  color = "red", radius = 4, opacity = .75, # fillOpacity = .33
+  #                  label = paste0("",tab2$Station),
+  #                  popup = paste(sep = "<br/>",
+  #                                paste0("<b>",tab2$Station,"</b>"),
+  #                                paste("ID:",tab2$ID),
+  #                                paste("HÃ¶he:",tab2$HÃ¶he,"m"),
+  #                                paste("Messpr.:",tab2$Messprodukte)),
+  #                  # paste("Land:",pt2()$Bundesland)),
+  #                  popupOptions = list(closeButton = FALSE))
+
+
 
 ## Filtern nach Messprodukt
 input1 <- paste(c("KL"),collapse = "|")
@@ -56,8 +105,8 @@ input3 <- c(as.Date("1999-01-01"),Sys.Date()-14)
 # 
 sel1 <- tab2[grep(input1, tab2$Messprodukte), ]
 # 
-# sel2 <- tab2[which(tab2$Höhe >= input2[1] &
-#         tab2$Höhe <= input2[2]), ]
+# sel2 <- tab2[which(tab2$H?he >= input2[1] &
+#         tab2$H?he <= input2[2]), ]
 # 
 # sel3 <- tab2[tab2$ID %in% unique(tab$ID[which(tab$Beginn >= input3[1] &
 #         tab$Beginn <= input3[2])]), ]
@@ -65,43 +114,34 @@ sel1 <- tab2[grep(input1, tab2$Messprodukte), ]
 # inner_join(sel1,sel2) %>%
 #   inner_join(sel3)
 
-bla <- inner_join(tab2[grep(paste(input1,collapse="|"), tab2$Messprodukte), ], ## 'paste(input$prod,collapse="|")' delivers regex compatible vector c("PE|RR|...")
-           ## selection for altitude
-           tab2[which(tab2$Höhe >= input2[1] & 
-                        tab2$Höhe <= input2[2]), ]) %>%
-  ## selection for time range
-  inner_join(tab2[tab2$ID %in% unique(tab$ID[which(tab$Beginn <= input3[1] &
-                                                     tab$Ende >= input3[2])]), ]) %>%
-  as.data.frame(stringsAsFactors = TRUE)
+library(RCurl)
+dir <- getURL("opendata.dwd.de/climate_environment/CDC/observations_germany/climate/",
+              verbose=TRUE,ftp.use.epsv=TRUE, dirlistonly = TRUE)
+dir
+library(XML)
+getHTMLLinks(dir)
 
-leaflet() %>%
-  setView(8.7862, 50.0899, zoom = 5) %>%
-  addProviderTiles("OpenTopoMap",providers$Stamen.TonerLite,
-                   options = providerTileOptions(noWrap = TRUE)) %>%
-  addLegend(position = "bottomright", colors = c("blue","red"), 
-            labels = c("Stationen mit ausgewählten Produkt(en)",
-                       "Ausgewählte Stationen")) %>%
-  addCircleMarkers(data = bla, lng = ~Länge, lat = ~Breite,
-                   color = "blue", label = ~Station, radius = 5, opacity = .75, # fillOpacity = .33, 
-                   popup = paste(sep = "<br/>",
-                                 paste0("<b>",bla$Station,"</b>"),
-                                 paste("ID:",bla$ID),
-                                 paste("Höhe:",bla$Höhe,"m"),
-                                 paste("Messpr.:",bla$Messprodukte)),
-                   # paste("Land:",pt2()$Bundesland)),
-                   popupOptions = list(closeButton = FALSE)) %>%
-  
-  addCircleMarkers(data = tab2, lat = ~Breite, lng = ~Länge,
-                   color = "red", label = ~Station, radius = 1, opacity = .75, # fillOpacity = .33
-                   popup = paste(sep = "<br/>",
-                                 paste0("<b>",tab2$Station,"</b>"),
-                                 paste("ID:",tab2$ID),
-                                 paste("Höhe:",tab2$Höhe,"m"),
-                                 paste("Messpr.:",tab2$Messprodukte)),
-                   # paste("Land:",pt2()$Bundesland)),
-                   popupOptions = list(closeButton = FALSE))
 
-  
+
+
+input.daterange <- "bla"
+input.altitude <- "blub"
+input.prod <- "KL"
+selected
+
+c("KL","RR","PE|PS","EB","FF","MI|MN","SO","SY","TU","AE")
+
+if(input.prod == "KL"){
+  input.prod <- "climate"
+  resol <- "daily"
+  add <- "kl"
+sprintf("ftp://opendata.dwd.de/climate_environment/CDC/observations_germany/%s/%s/%s", 
+        input.prod, resol,add)
+}
+"tageswerte_RR_00001_19120101_19860630_hist.zip"
+
+
+unzip(path, list = TRUE)
 
 
 
@@ -120,7 +160,7 @@ leaflet() %>%
 #   
 #   db <- c(1:length(stat_id))
 #   for(i in 1:length(stat_id)){
-#     ## IDs mit Länge > 5 nicht zugelassen
+#     ## IDs mit L?nge > 5 nicht zugelassen
 #     if(nchar(stat_id[i])>5){stop("invalid station ID length")}
 #     ## Eingegebene IDs werden auf 5 Stellen vereinheitlicht
 #     stat_id[i] <- paste0(paste(rep("0",5-nchar(stat_id[i])),collapse = ""),stat_id[i])
@@ -132,7 +172,7 @@ leaflet() %>%
 #     endURL_h <- paste0(baseURL,resol,"/",prod,"/","historical","/",file_h)
 #     endURL_r <- paste0(baseURL,resol,"/",prod,"/","recent","/",file_r)
 #     
-#     ## Verzeichnis und Name der temporären Datei
+#     ## Verzeichnis und Name der tempor?ren Datei
 #     temp_h <- tempfile()
 #     temp_r <- tempfile()
 #     
@@ -154,7 +194,7 @@ leaflet() %>%
 #                         header=T, sep = ";")
 #     tab <- rbind(tab_h,tab_r)
 #     db[i] <- list(tab)
-#     ## Löschung der temporären Datei und temp-filenames
+#     ## L?schung der tempor?ren Datei und temp-filenames
 #     file.remove(fln_h)
 #     file.remove(fln_r)
 #     

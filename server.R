@@ -45,12 +45,12 @@ server <- function(input, output) { # , session
   
   tab <- as.data.frame(tab)
   colnames(tab)  <- c("Station","ID","Messprodukte","stat-kennung",
-                      "Breite","Länge","Höhe","Flussgebiet","Bundesland","Beginn","Ende")
+                      "Breite","LÃ¤nge","HÃ¶he","Flussgebiet","Bundesland","Beginn","Ende")
   # tab <- tab[,c(-4,-8)]
   tab$ID <- as.numeric(tab$ID)
   tab$Breite <- as.numeric(tab$Breite)
-  tab$Länge <- as.numeric(tab$Länge)
-  tab$Höhe <- as.numeric(tab$Höhe)
+  tab$LÃ¤nge <- as.numeric(tab$LÃ¤nge)
+  tab$HÃ¶he <- as.numeric(tab$HÃ¶he)
   tab$Beginn <- as.Date(tab$Beginn, "%d.%m.%Y")
   tab$Ende <- as.Date(tab$Ende, "%d.%m.%Y")
   
@@ -61,23 +61,23 @@ server <- function(input, output) { # , session
       "ID" = unique(ID),
       "Messprodukte" = unique(paste(Messprodukte, collapse = ", ")), 
       "Breite" = unique(Breite),
-      "Länge" = unique(Länge), 
-      "Höhe" = unique(Höhe), 
+      "LÃ¤nge" = unique(LÃ¤nge), 
+      "HÃ¶he" = unique(HÃ¶he), 
       "Bundesland" = unique(Bundesland)) %>%
     as.data.frame())
   
   ## creating SpatialPointsDataframe for map (not necessary)
   # pt <- tab2
-  # sp::coordinates(pt) <- ~Länge+Breite
+  # sp::coordinates(pt) <- ~LÃ¤nge+Breite
   # sp::proj4string(pt) <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
   
   incProgress(2/4)
   
   
   ## altitude and time range sidebar menu
-  output$altitude <- renderMenu({sliderInput("altitude", "Stationshöhe",
-              min = min(tab$Höhe), max = max(tab$Höhe),
-              value = c(min(tab$Höhe),max(tab$Höhe)), sep = NA)
+  output$altitude <- renderMenu({sliderInput("altitude", "StationshÃ¶he",
+              min = min(tab$HÃ¶he), max = max(tab$HÃ¶he),
+              value = c(min(tab$HÃ¶he),max(tab$HÃ¶he)), sep = NA)
   })
   
   output$daterange <- renderMenu({
@@ -91,8 +91,8 @@ server <- function(input, output) { # , session
     ## selection for product
     suppressMessages(inner_join(tab2[grep(paste(input$prod,collapse="|"), tab2$Messprodukte), ], ## 'paste(input$prod,collapse="|")' delivers regex compatible vector c("PE|RR|...")
     ## selection for altitude
-               tab2[which(tab2$Höhe >= input$altitude[1] & 
-                               tab2$Höhe <= input$altitude[2]), ]) %>%
+               tab2[which(tab2$HÃ¶he >= input$altitude[1] & 
+                               tab2$HÃ¶he <= input$altitude[2]), ]) %>%
       ## selection for time range
       inner_join(tab2[tab2$ID %in% unique(tab$ID[which(tab$Beginn <= input$daterange[1] &
                                                             tab$Ende >= input$daterange[2])]), ]) %>%
@@ -115,31 +115,31 @@ server <- function(input, output) { # , session
       addProviderTiles("OpenTopoMap",providers$Stamen.TonerLite,
                        options = providerTileOptions(noWrap = TRUE)) %>%
       addLegend(position = "bottomright", colors = c("blue","red"), 
-                labels = c("Stationen mit ausgewählten Produkt(en)",
-                           "Ausgewählte Stationen"))
+                labels = c("Stationen mit ausgewÃ¤hlten Produkt(en)",
+                           "AusgewÃ¤hlte Stationen"))
   })
   observe({
       leafletProxy("mapplot") %>%
       clearMarkers() %>% # clears markers of previous selection on input update
       
-      addCircleMarkers(data = tb(), lat = ~Breite, lng = ~Länge, 
+      addCircleMarkers(data = tb(), lat = ~Breite, lng = ~LÃ¤nge, 
                        color = "blue", radius = 1, opacity = .75, # fillOpacity = .33,
                        label = paste0("",tb()$Station),
                        popup = paste(sep = "<br/>",
                                      paste0("<b>",tb()$Station,"</b>"),
                                      paste("ID:",tb()$ID),
-                                     paste("Höhe:",tb()$Höhe,"m"),
+                                     paste("HÃ¶he:",tb()$HÃ¶he,"m"),
                                      paste("Messpr.:",tb()$Messprodukte)),
                        # paste("Land:",pt2()$Bundesland)),
                        popupOptions = list(closeButton = FALSE)) %>%
       
-      addCircleMarkers(data = pt(), lat = ~Breite, lng = ~Länge,
+      addCircleMarkers(data = pt(), lat = ~Breite, lng = ~LÃ¤nge,
                        color = "red", radius = 4, opacity = .75, # fillOpacity = .33
                        label = ~Station,
                        popup = paste(sep = "<br/>",
                                      paste0("<b>",pt()$Station,"</b>"),
                                      paste("ID:",pt()$ID),
-                                     paste("Höhe:",pt()$Höhe,"m"),
+                                     paste("HÃ¶he:",pt()$HÃ¶he,"m"),
                                      paste("Messpr.:",pt()$Messprodukte)),
                        # paste("Land:",pt2()$Bundesland)),
                        popupOptions = list(closeButton = FALSE))
@@ -158,20 +158,20 @@ server <- function(input, output) { # , session
               # theme = reactableTheme(color = "white", backgroundColor = bgcol, borderColor = "#808080", stripedColor = strpcol),
               columns = list(
                 ID = colDef(align = "left"),
-                Höhe = colDef(name = "Höhe [m ü. NN]", align = "center"),
+                HÃ¶he = colDef(name = "HÃ¶he [m Ã¼. NN]", align = "center"),
                 Messprodukte = colDef(name = "verf. Messprodukte")
                 # Breite = colDef(name = "Breite (lat)", filterable = FALSE, align = "right"),
-                # Länge = colDef(name = "Länge (lon)", filterable = FALSE, align = "left")
+                # LÃ¤nge = colDef(name = "LÃ¤nge (lon)", filterable = FALSE, align = "left")
                             ),
               language = reactableLang(
                               searchPlaceholder = "Suche...",
-                              noData = "Keine Einträge gefunden",
-                              pageInfo = "{rowStart} bis {rowEnd} von {rows} Einträgen",
+                              noData = "Keine EintrÃ¤ge gefunden",
+                              pageInfo = "{rowStart} bis {rowEnd} von {rows} EintrÃ¤gen",
                               pagePrevious = "\u276e",
                               pageNext = "\u276f",
                               pageSizeOptions = "Zeige {rows}",
                               pagePreviousLabel = "Vorherige Seite",
-                              pageNextLabel = "Nächste Seite",
+                              pageNextLabel = "NÃ¤chste Seite",
                               deselectRowLabel = "Auswahl aufheben"
                             )
     )
@@ -185,13 +185,13 @@ server <- function(input, output) { # , session
               columns = list(Beginn = colDef(filterable = F), Ende = colDef(filterable = F)),
               language = reactableLang(
                 searchPlaceholder = "Suche...",
-                noData = "Keine Einträge gefunden",
-                pageInfo = "{rowStart} bis {rowEnd} von {rows} Einträgen",
+                noData = "Keine EintrÃ¤ge gefunden",
+                pageInfo = "{rowStart} bis {rowEnd} von {rows} EintrÃ¤gen",
                 pagePrevious = "\u276e",
                 pageNext = "\u276f",
                 pageSizeOptions = "Zeige {rows}",
                 pagePreviousLabel = "Vorherige Seite",
-                pageNextLabel = "Nächste Seite",
+                pageNextLabel = "NÃ¤chste Seite",
                 deselectRowLabel = "Auswahl aufheben"
               )
     )
@@ -200,18 +200,18 @@ server <- function(input, output) { # , session
   incProgress(4/4)
   #### Testboxes for selected stations ####
   # output$rownr <- renderText({
-  #   paste("Anzahl ausgewählter Stationen:", length(tb()[selected(),"ID"]) )
+  #   paste("Anzahl ausgewÃ¤hlter Stationen:", length(tb()[selected(),"ID"]) )
   # })
   
 
   output$rownr <- renderText({
-    paste("Stationen ausgewählt:",length(selected()) )
+    paste("Stationen ausgewÃ¤hlt:",length(selected()) )
   })
   # output$rownr <- renderText({
   #   length(tb()[,1])
   #   })
   
-    # output$rownr <-  renderText(paste("Stationen ausgewählt:",
+    # output$rownr <-  renderText(paste("Stationen ausgewÃ¤hlt:",
     #                                   length(tb()[input$DTtable_rows_selected, "ID"])) )
     # output$rownr <- renderText(substr(input$checkboxes,1,2))
 
@@ -231,7 +231,7 @@ server <- function(input, output) { # , session
       
       db <- c(1:length(stat_id))
       for(i in 1:length(stat_id)){
-        ## IDs mit Länge > 5 nicht zugelassen
+        ## IDs mit LÃ¤nge > 5 nicht zugelassen
         if(nchar(stat_id[i])>5){stop("invalid station ID length")}
         ## Eingegebene IDs werden auf 5 Stellen vereinheitlicht
         stat_id[i] <- paste0(paste(rep("0",5-nchar(stat_id[i])),collapse = ""),stat_id[i])
@@ -243,7 +243,7 @@ server <- function(input, output) { # , session
         endURL_h <- paste0(baseURL,resol,"/",prod,"/","historical","/",file_h)
         endURL_r <- paste0(baseURL,resol,"/",prod,"/","recent","/",file_r)
         
-        ## Verzeichnis und Name der temporären Datei
+        ## Verzeichnis und Name der temporÃ¤ren Datei
         temp_h <- tempfile()
         temp_r <- tempfile()
         
@@ -265,7 +265,7 @@ server <- function(input, output) { # , session
                             header=T, sep = ";")
         tab <- rbind(tab_h,tab_r)
         db[i] <- list(tab)
-        ## Löschung der temporären Datei und temp-filenames
+        ## LÃ¶schung der temporÃ¤ren Datei und temp-filenames
         file.remove(fln_h)
         file.remove(fln_r)
         
@@ -284,7 +284,7 @@ server <- function(input, output) { # , session
   
   # observe(
   #   output$hist <- renderPlot(
-  #     hist(tab2[,"Stations.höhe"], breaks = 100, ylab = "Anzahl", xlab = "[m ü. NN]", main = NA)
+  #     hist(tab2[,"Stations.hÃ¶he"], breaks = 100, ylab = "Anzahl", xlab = "[m Ã¼. NN]", main = NA)
   #   )
   # )
    
